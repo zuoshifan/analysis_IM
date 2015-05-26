@@ -614,20 +614,56 @@ class DirtyMapMaker(object):
                 P = pointing_list[ii]
                 # Make the dirty map.
                 noise_mat = N.get_mat()
+                pointing_mat = P.get_matrix()
                 if mpiutil.rank == 1:
-                    # construct a new large matrix to hold the Q, U compled noise matrix
-                    QU_noise_matrix = sp.zeros((2,)+noise_mat.row_shape()+(2,)+noise_mat.col_shape(), dtype=float)
+                    # construct a new large matrix to hold the Q, U coupled noise matrix
+                    QU_noise_matrix = sp.zeros((2,)+noise_mat.row_shape()+(2,)+noise_mat.col_shape(), dtype=noise_mat.dtype)
                     QU_noise_matrix = al.make_mat(QU_noise_matrix,
                                       axis_names=('pol', 'freq', 'time', 'pol', 'freq', 'time'),
                                       row_axes=(0, 1, 2), col_axes=(3, 4, 5))
                     QU_noise_matrix[0, :, :, 0, :, :] = noise_mat # Q noise matrix
                     U_noise_mat = al.empty_like(noise_mat)
                     mpiutil.world.Recv(U_noise_mat, source=2, tag=0)
-                    print 'Process 1 has received U from 2.'
+                    print 'Process 1 has received U noise matrix from 2.'
                     QU_noise_matrix[1, :, :, 1, :, :] = U_noise_mat # U noise matrix
-                if mpiutil.rank == 2:
+                    QU_noise_inv = QU_noise_matrix.inv()
+                    del QU_noise_matrix
+                    # construct a new large vector to hold the Q, U time stream
+                    QU_time_stream = sp.zeros((2,)+time_stream.shape, dtype=time_stream.dtype)
+                    QU_time_stream = al.make_vect(QU_time_stream,
+                                      axis_names=('pol', 'freq', 'time'))
+                    QU_time_stream[0] = time_stream
+                    U_time_stream = al.empty_like(time_stream)
+                    mpiutil.world.Recv(U_time_stream, source=2, tag=1)
+                    print 'Process 1 has received U time stream from 2.'
+                    QU_time_stream[1] = U_time_stream
+                    # # calculate N^-1 d
+                    # Ninvd = al.dot(QU_noise_inv, QU_time_stream)
+                    # print Ninvd.shape
+                    # calculate P^T N^-1
+                    PTNinv = al.partial_dot(pointing_mat.mat_transpose(), QU_noise_inv)
+                    QU_map = al.dot(PTNinv, QU_time_stream)
+                    print 'Process %d: ' % mpiutil.rank, QU_map.shape
+                    print 'Process %d: ' % mpiutil.rank, QU_map.info
+                    map += QU_map[:, :, 0, :].transpose((2, 0, 1)) # Q dirty map
+                    U_map = QU_map[:, :, 1, :].transpose((2, 0, 1)) # U dirty map
+                    mpiutil.world.Send(np.ascontiguousarray(U_map), dest=2, tag=3)
+                    print 'Process 1 has send U dirty map to 1.'
+                elif mpiutil.rank == 2:
                     mpiutil.world.Send(noise_mat, dest=1, tag=0)
-                    print 'Process 2 has send U to 1.'
+                    print 'Process 2 has send U noise matrix to 1.'
+                    mpiutil.world.Send(time_stream, dest=1, tag=1)
+                    print 'Process 2 has send U time stream to 1.'
+                    U_map = al.empty_like(map)
+                    mpiutil.world.Recv(U_map, source=1, tag=3)
+                    print 'Process 2 has received U dirty map from 2.'
+                    map += U_map
+                else:
+                    PTNinv = al.partial_dot(pointing_mat.mat_transpose(), N.get_inverse())
+                    map += al.dot(PTNinv, time_stream)
+                    print 'Process %d: ' % mpiutil.rank, map.shape
+                    print 'Process %d: ' % mpiutil.rank, map.info
+                    
                 mpiutil.barrier()
                 err
                 # weighted_time_stream = N.weight_time_stream(time_stream)
