@@ -19,6 +19,7 @@ import scipy.fftpack as fft
 from scipy import linalg
 from scipy import interpolate
 import numpy as np
+# from mpi4py import MPI
 #import matplotlib.pyplot as plt
 
 import core.algebra as al
@@ -34,6 +35,7 @@ import _mapmaker as _mapmaker_c
 from constants import T_infinity, T_huge, T_large, T_medium, T_small, T_sys
 from constants import f_medium, f_large
 from utils import misc
+from utils import mpiutil
 
 prefix ='dm_'
 params_init = {# IO:
@@ -391,7 +393,12 @@ class DirtyMapMaker(object):
         del Blocks
         del Reader
         map_shape = (self.n_chan, self.n_ra, self.n_dec)
-        for ii in pol_inds:
+        print 'Process: %d' % mpiutil.rank
+        if len(pol_inds) != 4 and mpiutil.size != 4:
+            raise Exception('Now can only deal with 4 polarizations wit 4 MPI processes.')
+        # for ii in pol_inds:
+        for ii in mpiutil.mpirange(mpiutil.size):
+            print 'Process %d run with pol %d...' % (mpiutil.rank, ii)
             for jj in band_inds:
                 self.band_ind = jj
                 band_centre = band_centres[jj]
@@ -606,7 +613,24 @@ class DirtyMapMaker(object):
                 N = noise_list[ii]
                 P = pointing_list[ii]
                 # Make the dirty map.
-                weighted_time_stream = N.weight_time_stream(time_stream)
+                noise_mat = N.get_mat()
+                if mpiutil.rank == 1:
+                    # construct a new large matrix to hold the Q, U compled noise matrix
+                    QU_noise_matrix = sp.zeros((2,)+noise_mat.row_shape()+(2,)+noise_mat.col_shape(), dtype=float)
+                    QU_noise_matrix = al.make_mat(QU_noise_matrix,
+                                      axis_names=('pol', 'freq', 'time', 'pol', 'freq', 'time'),
+                                      row_axes=(0, 1, 2), col_axes=(3, 4, 5))
+                    QU_noise_matrix[0, :, :, 0, :, :] = noise_mat # Q noise matrix
+                    U_noise_mat = al.empty_like(noise_mat)
+                    mpiutil.world.Recv(U_noise_mat, source=2, tag=0)
+                    print 'Process 1 has received U from 2.'
+                    QU_noise_matrix[1, :, :, 1, :, :] = U_noise_mat # U noise matrix
+                if mpiutil.rank == 2:
+                    mpiutil.world.Send(noise_mat, dest=1, tag=0)
+                    print 'Process 2 has send U to 1.'
+                mpiutil.barrier()
+                err
+                # weighted_time_stream = N.weight_time_stream(time_stream)
                 map += P.apply_to_time_axis(weighted_time_stream)
             if self.feedback > 1:
                 print "Dirty map done."
@@ -1597,8 +1621,8 @@ class Noise(object):
         n_chan = self.n_chan
         n_time = self.n_time
         n = n_chan * n_time
-        freq_modes = self.freq_modes
-        time_modes = self.time_modes
+        # freq_modes = self.freq_modes
+        # time_modes = self.time_modes
         # Allowcate memory.
         out = sp.zeros((n_chan, n_time, n_chan, n_time), dtype=float)
         out = al.make_mat(out, axis_names=('freq','time','freq','time'),
