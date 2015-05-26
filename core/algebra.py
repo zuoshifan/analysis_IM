@@ -62,6 +62,7 @@ from functools import wraps
 import operator
 
 import scipy as sp
+from scipy import linalg as alg
 import numpy as np
 import numpy.lib.format as npfor
 from numpy.lib.utils import safe_eval
@@ -1509,6 +1510,29 @@ class mat(alg_object) :
                     col_start:col_start + block_shape[1]] = mat_block
         return out_mat
 
+    def inv(self):
+        """Inverse the matrix.
+
+        Returns
+        -------
+        inv_matrix : mat object
+            A `mat` object which is the inverse (pseudo-inverse if non-invertable) of `self`.
+        """
+        try:
+            out = alg.inv(self.expand())
+        except alg.LinAlgError:
+            print 'Singular matrix, return pseudo-inverse instead.'
+            out = alg.pinv(self.expand())
+
+        out = make_mat(out.reshape(self.col_shape()+self.row_shape()), axis_names=self.col_names()+self.row_names(), row_axes=self.rows, col_axes=self.cols)
+        # Make a copy of the info dictionary.
+        info = dict(self.info)
+        # Copy some info to the inverse matrix
+        info.update(out.info)
+        out.info = info
+
+        return out
+        
     def mat_transpose(self):
         """Transpose the matrix.
 
