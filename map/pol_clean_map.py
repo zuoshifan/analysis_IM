@@ -69,32 +69,48 @@ QU_dirty_map[1] = U_dirty_map
 del Q_dirty_map
 del U_dirty_map
 
-# construct inverse of the Q, U noise inv matrix
-inv_QU_noise_inv = sp.zeros((2, 2)+Q_noise_inv.row_shape()+Q_noise_inv.col_shape()[1:], dtype=Q_noise_inv.dtype)
-inv_QU_noise_inv = al.make_mat(inv_QU_noise_inv, axis_names=('pol', 'pol', 'freq', 'ra', 'dec', 'ra', 'dec'), row_axes=(0, 2, 3, 4), col_axes=(1, 2, 5, 6))
+##################  simple inv in diagonal ##########################
+# # construct inverse of the Q, U noise inv matrix
+# inv_QU_noise_inv = sp.zeros((2, 2)+Q_noise_inv.row_shape()+Q_noise_inv.col_shape()[1:], dtype=Q_noise_inv.dtype)
+# inv_QU_noise_inv = al.make_mat(inv_QU_noise_inv, axis_names=('pol', 'pol', 'freq', 'ra', 'dec', 'ra', 'dec'), row_axes=(0, 2, 3, 4), col_axes=(1, 2, 5, 6))
 
-shape = Q_noise_inv.row_shape()[1:] + Q_noise_inv.col_shape()[1:]
-mat_shape = (np.prod(Q_noise_inv.row_shape()[1:]), np.prod(Q_noise_inv.col_shape()[1:]))
-for ii in range(Q_noise_inv.shape[0]):
-    # inv_QU_noise_inv[0, 0, ii] = alg.pinv(np.array(Q_noise_inv[ii]).reshape(shape))
-    Qninv = alg.pinv(Q_noise_inv[ii].reshape(mat_shape)).reshape(shape)
-    Uninv = alg.pinv(U_noise_inv[ii].reshape(mat_shape)).reshape(shape)
-    inv_QU_noise_inv[0, 0, ii] = Qninv # al.make_mat(Qninv, axis_names=('ra', 'dec', 'ra', 'dec'), row_axes=(0, 1), col_axes=(2, 3)).inv()
-    inv_QU_noise_inv[1, 1, ii] = Uninv # al.make_mat(Uninv, axis_names=('ra', 'dec', 'ra', 'dec'), row_axes=(0, 1), col_axes=(2, 3)).inv()
+# shape = Q_noise_inv.row_shape()[1:] + Q_noise_inv.col_shape()[1:]
+# mat_shape = (np.prod(Q_noise_inv.row_shape()[1:]), np.prod(Q_noise_inv.col_shape()[1:]))
+# for ii in range(Q_noise_inv.shape[0]):
+#     # inv_QU_noise_inv[0, 0, ii] = alg.pinv(np.array(Q_noise_inv[ii]).reshape(shape))
+#     Qninv = alg.pinv(Q_noise_inv[ii].reshape(mat_shape)).reshape(shape)
+#     Uninv = alg.pinv(U_noise_inv[ii].reshape(mat_shape)).reshape(shape)
+#     inv_QU_noise_inv[0, 0, ii] = Qninv # al.make_mat(Qninv, axis_names=('ra', 'dec', 'ra', 'dec'), row_axes=(0, 1), col_axes=(2, 3)).inv()
+#     inv_QU_noise_inv[1, 1, ii] = Uninv # al.make_mat(Uninv, axis_names=('ra', 'dec', 'ra', 'dec'), row_axes=(0, 1), col_axes=(2, 3)).inv()
+# del Q_noise_inv
+# del U_noise_inv
+##################  simple inv in diagonal ##########################
+
+
+##################  simple diagonal inv #############################
+# construct Q, U noise inv matrix
+row_shape = Q_noise_inv.row_shape()
+row_shape = (row_shape[0],) + (2,) + row_shape[1:]
+col_shape = row_shape[1:]
+QU_noise_inv = sp.zeros(row_shape+col_shape, dtype=Q_noise_inv.dtype)
+QU_noise_inv = al.make_mat(QU_noise_inv, axis_names=('freq', 'pol', 'ra', 'dec', 'pol', 'ra', 'dec'), row_axes=(0, 1, 2, 3), col_axes=(0, 4, 5, 6))
+QU_noise_inv[:, 0, :, :, 0] = Q_noise_inv # Q noise matrix
 del Q_noise_inv
+QU_noise_inv[:, 1, :, :, 1] = U_noise_inv # U noise matrix
 del U_noise_inv
 
-
-# # construct Q, U noise inv matrix
-# QU_noise_inv = sp.zeros((2, 2)+Q_noise_inv.row_shape()+Q_noise_inv.col_shape()[1:], dtype=Q_noise_inv.dtype)
-# QU_noise_inv = al.make_mat(QU_noise_inv, axis_names=('pol', 'pol', 'freq', 'ra', 'dec', 'ra', 'dec'), row_axes=(0, 2, 3, 4), col_axes=(1, 2, 5, 6))
-# QU_noise_inv[0, 0] = Q_noise_inv # Q noise matrix
-# del Q_noise_inv
-# QU_noise_inv[1, 1] = U_noise_inv # U noise matrix
-# del U_noise_inv
-
+# construct inverse of the Q, U noise inv matrix
+inv_QU_noise_inv = sp.zeros(row_shape+col_shape, dtype=QU_noise_inv.dtype)
+inv_QU_noise_inv = al.make_mat(inv_QU_noise_inv, axis_names=('freq', 'pol', 'ra', 'dec', 'pol', 'ra', 'dec'), row_axes=(0, 1, 2, 3), col_axes=(0, 4, 5, 6))
+shape = col_shape + col_shape
+mat_shape = (np.prod(col_shape), np.prod(col_shape))
+for ii in range(inv_QU_noise_inv.shape[3]):
+    inv_QU_noise_inv[ii] = alg.pinv(QU_noise_inv[ii].reshape(mat_shape)).reshape(shape)
 # inv_QU_noise_inv = QU_noise_inv.inv()
-# del QU_noise_inv
+del QU_noise_inv
+print inv_QU_noise_inv.shape
+print inv_QU_noise_inv.info
+##################  simple diagonal inv #############################
 
 QU_clean_map = al.partial_dot(inv_QU_noise_inv, QU_dirty_map)
 del QU_dirty_map
