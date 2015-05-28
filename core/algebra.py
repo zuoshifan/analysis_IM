@@ -1532,7 +1532,31 @@ class mat(alg_object) :
         out.info = info
 
         return out
-        
+
+        # #####################
+        # row_names = list(self.row_names())
+        # col_names = list(self.col_names())
+        # row_shape = list(self.row_shape())
+        # col_shape = list(self.col_shape())
+        # if row_shape != col_shape:
+        #     raise NotImplementedError('Non-square matrix inversion not implemented')
+        # diag_axes = [ii for ii in range(self.ndim) if ii in self.rows and ii in self.cols]
+        # for ii in diag_axes:
+        #     del row_names[ii]
+        #     del row_shape[ii]
+        # inv_name = col_names + row_names
+        # inv_shape = col_shape + row_shape
+        # out = make_mat(sp.zeros(inv_shape, dtype=self.dtype), axis_names=col_names+row_names, row_axes=self.rows, col_axes=self.cols)
+        # # Make a copy of the info dictionary.
+        # info = dict(self.info)
+        # # Copy some info to the inverse matrix
+        # info.update(out.info)
+        # out.info = info
+        # print out.shape
+        # print out.info
+
+
+
     def mat_transpose(self):
         """Transpose the matrix.
 
