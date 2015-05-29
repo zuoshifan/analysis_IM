@@ -8,8 +8,8 @@ import core.algebra as al
 
 Q_dmap_fname = '/mnt/scratch-lustre/sfzuo/programming/workspace/analysis_IM/maps_old_bak/tut_dirty_map_Q_762.npy'
 U_dmap_fname = '/mnt/scratch-lustre/sfzuo/programming/workspace/analysis_IM/maps_old_bak/tut_dirty_map_U_762.npy'
-Q_cmap_fname = '/mnt/scratch-lustre/sfzuo/programming/workspace/analysis_IM/maps_old_bak/tut_clean_map_Q_762_coupled.npy'
-U_cmap_fname = '/mnt/scratch-lustre/sfzuo/programming/workspace/analysis_IM/maps_old_bak/tut_clean_map_U_762_coupled.npy'
+Q_cmap_fname = '/mnt/scratch-lustre/sfzuo/programming/workspace/analysis_IM/maps_old_bak/tut_clean_map_Q_762_coupled_non-diag.npy'
+U_cmap_fname = '/mnt/scratch-lustre/sfzuo/programming/workspace/analysis_IM/maps_old_bak/tut_clean_map_U_762_coupled_non-diag.npy'
 Q_noise_inv_fname = '/mnt/scratch-lustre/sfzuo/programming/workspace/analysis_IM/maps_old_bak/tut_noise_inv_Q_762.npy'
 U_noise_inv_fname = '/mnt/scratch-lustre/sfzuo/programming/workspace/analysis_IM/maps_old_bak/tut_noise_inv_U_762.npy'
 
@@ -99,12 +99,23 @@ del Q_noise_inv
 QU_noise_inv[:, 1, :, :, 1] = U_noise_inv # U noise matrix
 del U_noise_inv
 
+# add non-diagonal couple terms
+factor = 1.0
+QU_max = QU_noise_inv.max()
+print 'max: ', QU_noise_inv.max()
+print 'mean: ', QU_noise_inv.mean()
+# QU_noise_inv[:, 0, :, :, 1] = factor * np.ones_like(QU_noise_inv[:, 0, :, :, 1])
+# QU_noise_inv[:, 1, :, :, 0] = factor * np.ones_like(QU_noise_inv[:, 1, :, :, 0])
+QU_noise_inv += factor * QU_max * np.ones_like(QU_noise_inv)
+# QU_noise_inv += factor * QU_max * np.random.random(QU_noise_inv.shape)
+
 # construct inverse of the Q, U noise inv matrix
 inv_QU_noise_inv = sp.zeros(row_shape+col_shape, dtype=QU_noise_inv.dtype)
 inv_QU_noise_inv = al.make_mat(inv_QU_noise_inv, axis_names=('freq', 'pol', 'ra', 'dec', 'pol', 'ra', 'dec'), row_axes=(0, 1, 2, 3), col_axes=(0, 4, 5, 6))
 shape = col_shape + col_shape
 mat_shape = (np.prod(col_shape), np.prod(col_shape))
-for ii in range(inv_QU_noise_inv.shape[3]):
+for ii in range(inv_QU_noise_inv.shape[0]):
+    print 'Frequency channel: %d...' % ii
     inv_QU_noise_inv[ii] = alg.pinv(QU_noise_inv[ii].reshape(mat_shape)).reshape(shape)
 # inv_QU_noise_inv = QU_noise_inv.inv()
 del QU_noise_inv
