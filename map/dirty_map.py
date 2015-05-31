@@ -655,9 +655,9 @@ class DirtyMapMaker(object):
                     del U_map
                     print 'Process 1 has send U dirty map to 1.'
 
-                    PTNinvP = al.partial_dot(PTNinv, pointing_mat)
-                    print 'Process %d: ' % mpiutil.rank, PTNinvP.shape
-                    print 'Process %d: ' % mpiutil.rank, PTNinvP.info
+                    # PTNinvP = al.partial_dot(PTNinv, pointing_mat)
+                    # print 'Process %d: ' % mpiutil.rank, PTNinvP.shape
+                    # print 'Process %d: ' % mpiutil.rank, PTNinvP.info
                 elif mpiutil.rank == 2:
                     del pointing_mat # Not used by this process
                     mpiutil.world.Send(noise_mat, dest=1, tag=0)
@@ -676,17 +676,16 @@ class DirtyMapMaker(object):
                     map += al.dot(PTNinv, time_stream)
                     del time_stream
                     
-                    print 'pointing_mat: ', pointing_mat.info
-                    print 'PTNinv: ', PTNinv.info
-                    PTNinvP = al.partial_dot(PTNinv, pointing_mat)
-                    del PTNinv
-                    del pointing_mat
-                    print 'Process %d: ' % mpiutil.rank, PTNinvP.shape
-                    print 'Process %d: ' % mpiutil.rank, PTNinvP.info
-                    # cov_inv += al.dot(PTNinv, pointing_mat)
+                    # print 'pointing_mat: ', pointing_mat.info
+                    # print 'PTNinv: ', PTNinv.info
+                    # PTNinvP = al.partial_dot(PTNinv, pointing_mat)
+                    # del PTNinv
+                    # del pointing_mat
+                    # print 'Process %d: ' % mpiutil.rank, PTNinvP.shape
+                    # print 'Process %d: ' % mpiutil.rank, PTNinvP.info
+                    # # cov_inv += al.dot(PTNinv, pointing_mat)
                     
                 mpiutil.barrier()
-                err
                 # weighted_time_stream = N.weight_time_stream(time_stream)
                 # map += P.apply_to_time_axis(weighted_time_stream)
             if self.feedback > 1:
