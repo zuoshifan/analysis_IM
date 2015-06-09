@@ -174,7 +174,6 @@ class MeanMapMaker(object):
             raise RuntimeError("Samplings not uniform.")
         self.BW = 1./2./dt
 
-        ###### code to preserve mean, only subtract slope
         # # Now that we have all the data in one place, subtract mean, slope.
         # if self.params['deweight_time_slope']:
         #     n_poly = 2
@@ -185,6 +184,7 @@ class MeanMapMaker(object):
         # time_stream -= sp.sum(amps[:,:,None] * polys, 0)
         # time_stream *= mask
 
+        # code to preserve mean, only subtract slope
         n_poly = 2
         polys = misc.ortho_poly(time[None,:], n_poly, mask, -1)
         polys = polys[1:, :] # preserve mean
@@ -411,61 +411,71 @@ class MeanMapMaker(object):
                 band_centre = band_centres[jj]
                 self.pol_ind = ii
                 pol = pols[ii]
-                if self.feedback > 1:
-                    print ("Making map for polarization "
-                           + utils.polint2str(pol) + " and band centred at "
-                           +repr(round(band_centre/1e6)) + "MHz.")
-                # Work out the file names.
-                map_filename = (params["output_root"] + "mean_map_"
-                                + utils.polint2str(pol)
-                                + "_" + str(int(round(band_centre/1e6)))
-                                + '.npy')
-                cov_filename = (params["output_root"] + "mean_noise_inv_"
-                                + utils.polint2str(pol)
-                                + "_" + str(int(round((band_centre/1e6))))
-                                + '.npy')
-                # Initialization of the outputs.
                 map = sp.zeros(map_shape, dtype=float)
                 map = al.make_vect(map, axis_names=('freq', 'ra', 'dec'))
                 map.set_axis_info('freq', band_centre, delta_freq)
                 map.set_axis_info('ra', params['field_centre'][0], ra_spacing)
                 map.set_axis_info('dec', params['field_centre'][1],
                                    params['pixel_spacing'])
-                if self.uncorrelated_channels:
-                    cov_inv = al.open_memmap(cov_filename, mode='w+',
-                                             shape=map_shape + map_shape[1:],
-                                             dtype=float)
-                    cov_inv = al.make_mat(cov_inv,
-                                axis_names=('freq', 'ra', 'dec', 'ra', 'dec'),
-                                row_axes=(0, 1, 2), col_axes=(0, 3, 4))
-                else:
-                    cov_inv = al.open_memmap(cov_filename, mode='w+',
-                                             shape=map_shape + map_shape,
-                                             dtype=float)
-                    cov_inv = al.make_mat(cov_inv,
-                                      axis_names=('freq', 'ra', 'dec',
-                                                  'freq', 'ra', 'dec'),
-                                      row_axes=(0, 1, 2), col_axes=(3, 4, 5))
-                cov_inv.copy_axis_info(map)
-                # cov_inv[...] = 0 # no need
                 self.map = map
-                self.cov_inv = cov_inv
-                # Do work.
-                try:
-                    self.make_map(utils.polint2str(pol))
-                except:
-                    # I think yo need to do this to get a sensible error
-                    # message, otherwise it will print cov_inv and fill the
-                    # screen.
-                    del self.cov_inv, cov_inv
-                    raise
-                # IO.
-                # To write the noise_inverse, all we have to do is delete the
-                # memeory map object.
-                del self.cov_inv, cov_inv
-                al.save(map_filename, map)
-        if not self.noise_params is None:
-            self.noise_params.close()
+
+                self.make_map(utils.polint2str(pol))
+
+        #         if self.feedback > 1:
+        #             print ("Making map for polarization "
+        #                    + utils.polint2str(pol) + " and band centred at "
+        #                    +repr(round(band_centre/1e6)) + "MHz.")
+        #         # Work out the file names.
+        #         map_filename = (params["output_root"] + "mean_map_"
+        #                         + utils.polint2str(pol)
+        #                         + "_" + str(int(round(band_centre/1e6)))
+        #                         + '.npy')
+        #         cov_filename = (params["output_root"] + "mean_noise_inv_"
+        #                         + utils.polint2str(pol)
+        #                         + "_" + str(int(round((band_centre/1e6))))
+        #                         + '.npy')
+        #         # Initialization of the outputs.
+        #         map = sp.zeros(map_shape, dtype=float)
+        #         map = al.make_vect(map, axis_names=('freq', 'ra', 'dec'))
+        #         map.set_axis_info('freq', band_centre, delta_freq)
+        #         map.set_axis_info('ra', params['field_centre'][0], ra_spacing)
+        #         map.set_axis_info('dec', params['field_centre'][1],
+        #                            params['pixel_spacing'])
+        #         if self.uncorrelated_channels:
+        #             cov_inv = al.open_memmap(cov_filename, mode='w+',
+        #                                      shape=map_shape + map_shape[1:],
+        #                                      dtype=float)
+        #             cov_inv = al.make_mat(cov_inv,
+        #                         axis_names=('freq', 'ra', 'dec', 'ra', 'dec'),
+        #                         row_axes=(0, 1, 2), col_axes=(0, 3, 4))
+        #         else:
+        #             cov_inv = al.open_memmap(cov_filename, mode='w+',
+        #                                      shape=map_shape + map_shape,
+        #                                      dtype=float)
+        #             cov_inv = al.make_mat(cov_inv,
+        #                               axis_names=('freq', 'ra', 'dec',
+        #                                           'freq', 'ra', 'dec'),
+        #                               row_axes=(0, 1, 2), col_axes=(3, 4, 5))
+        #         cov_inv.copy_axis_info(map)
+        #         # cov_inv[...] = 0 # no need
+        #         self.map = map
+        #         self.cov_inv = cov_inv
+        #         # Do work.
+        #         try:
+        #             self.make_map(utils.polint2str(pol))
+        #         except:
+        #             # I think yo need to do this to get a sensible error
+        #             # message, otherwise it will print cov_inv and fill the
+        #             # screen.
+        #             del self.cov_inv, cov_inv
+        #             raise
+        #         # IO.
+        #         # To write the noise_inverse, all we have to do is delete the
+        #         # memeory map object.
+        #         del self.cov_inv, cov_inv
+        #         al.save(map_filename, map)
+        # if not self.noise_params is None:
+        #     self.noise_params.close()
 
     def make_map(self, pol_str):
         """Makes map for current polarization and band.
@@ -475,7 +485,7 @@ class MeanMapMaker(object):
 
         params = self.params
         map = self.map
-        cov_inv = self.cov_inv
+        # cov_inv = self.cov_inv
         # This outer loop is over groups of files.  This is so we don't need to
         # hold the noise matrices for all the data in memory at once.
         file_middles = params['file_middles']
@@ -524,227 +534,227 @@ class MeanMapMaker(object):
 
                 time_stream -= al.partial_dot(pointing_mat, cmap).T
                 # save the mean time_stream
-                ts_file = (self.params["output_root"] + pol_str + 'time_stream.npy')
+                ts_file = (self.params["output_root"] + pol_str + '_time_stream.npy')
                 al.save(ts_file, time_stream)
                 #########
 
-                # Now build up our noise model for this piece of data.
-                N = Noise(time_stream, time)
-                N.add_mask(mask_inds)
-                # The thermal part.
-                thermal_noise = self.get_noise_parameter("thermal")
-                try:
-                    N.add_thermal(thermal_noise)
-                except NoiseError:
-                    continue
-                # Frequency correlations.
-                if params['frequency_correlations'] == 'mean':
-                    mean_overf = self.get_noise_parameter("mean_over_f")
-                    N.add_correlated_over_f(*mean_overf)
-                elif params['frequency_correlations'] == 'measured':
-                    # Correlated channel mode noise.
-                    # The first frequency modes are completly deweighted. This
-                    # was seen to be nessisary from looking at the noise
-                    # spectra.
-                    n_modes_discard = params['number_frequency_modes_discard']
-                    try:
-                        for ii in range(n_modes_discard):
-                            mode_noise_params = self.get_noise_parameter(
-                                    "over_f_mode_" + repr(ii))
-                            # Instead of completly discarding, multiply
-                            # amplitude by 2.
-                            #N.deweight_freq_mode(mode_noise_params[4])
-                            mode_noise_params = ((mode_noise_params[0] * 2,)
-                                                 + mode_noise_params[1:])
-                            N.add_over_f_freq_mode(*mode_noise_params)
-                        # The remaining frequency modes are noise weighed
-                        # normally.
-                        n_modes = params['number_frequency_modes']
-                        for ii in range(n_modes_discard, n_modes):
-                            mode_noise_params = self.get_noise_parameter(
-                                "over_f_mode_" + repr(ii))
-                            N.add_over_f_freq_mode(*mode_noise_params)
-                        # All channel low frequency noise.
-                        all_chan_noise_params = self.get_noise_parameter(
-                                'all_channel')
-                        # In some cases the corner frequncy will be so high that
-                        # this scan will contain no information.
-                        N.add_all_chan_low(*all_chan_noise_params)
-                    except NoiseError:
-                        if self.feedback > 1:
-                            print ("Noise parameters risk numerical"
-                                   " instability. Data skipped.")
-                        continue
-                elif params['frequency_correlations'] == 'None':
-                    pass
-                else:
-                    raise ValueError("Invalid frequency correlations.")
-                # Things to do along the time axis.  With no frequency
-                # correlations, things are more stable.  Also, thermal noise
-                # estimate will be high, so you need to deweight things extra.
-                if params['deweight_time_mean']:
-                    N.deweight_time_mean(T_huge**2)
-                if params['deweight_time_slope']:
-                    N.deweight_time_slope(T_huge**2)
-                # If we've subtracted any modes out of the time stream,
-                # deweight them.
-                for mode_num in range(params['n_ts_foreground_modes']):
-                    N.deweight_freq_mode(self.get_ts_foreground_mode(mode_num),
-                            T_large**2, params['deweight_time_slope'])
-                # Store all these for later.
-                pointing_list.append(P)
-                noise_list.append(N)
-                data_list.append(time_stream)
-            # Threaded loop to finalize all the noises.  Each finalization
-            # requires a large inverse.
-            if self.feedback > 1:
-                print "Finalizing %d noise blocks: " % len(data_list)
-            # Initialize the queue of noise objects to work on.
-            noise_queue = Queue()
-            # Define a function that takes work off the queue and does it.
-            def thread_work():
-                while True:
-                    thread_N = noise_queue.get()
-                    # None will be the flag that there is no more work to do.
-                    if thread_N is None:
-                        return
-                    else:
-                        thread_N.finalize(frequency_correlations=(not
-                                self.uncorrelated_channels),
-                                preserve_matrices=False)
-                        if self.feedback > 1:
-                            sys.stdout.write('.')
-                            sys.stdout.flush()
-            # Start the worker threads.
-            thread_list = []
-            for ii in range(self.n_processes):
-                T = threading.Thread(target=thread_work)
-                T.start()
-                thread_list.append(T)
-            # Now put work on the queue for the threads to do.
-            for N in noise_list:
-                noise_queue.put(N)
-            # At the end of the queue, tell the threads that they are done.
-            for ii in range(self.n_processes):
-                noise_queue.put(None)
-            # Wait for the threads.
-            for T in thread_list:
-                T.join()
-            if not noise_queue.empty():
-                msg = "A thread had an error in Noise finialization."
-                raise RuntimeError(msg)
-            if self.feedback > 1:
-                print
-                print "Noise finalized."
-            # Construct the dirty map.
-            for ii in xrange(len(data_list)):
-                time_stream = data_list[ii]
-                N = noise_list[ii]
-                P = pointing_list[ii]
-                # Make the dirty map.
-                weighted_time_stream = N.weight_time_stream(time_stream)
-                map += P.apply_to_time_axis(weighted_time_stream)
-            if self.feedback > 1:
-                print "Dirty map done."
-                print "Building map covariance. Frequecies finished:"
-            # Now we have lists with all the data and thier noise.
-            # Accumulate it into a dirty map and its covariance.
-            n_time_blocks = len(noise_list)
-            # Initialize the queue of work to be done.
-            index_queue = Queue()
-            # I'm using a Lock to write to the memory map, not because I need
-            # it but to hopefully keep simultaniouse writes from grinding
-            # things to a halt.
-            write_lock = threading.Lock()
-            # Define a function that takes work off a queue and does it.
-            # Variable local to this function prefixed with 'thread_'.
-            def thread_work():
-                while True:
-                    thread_inds = index_queue.get()
-                    # None will be the flag that there is no more work to do.
-                    if thread_inds is None:
-                        return
-                    if self.uncorrelated_channels:
-                        thread_f_ind = thread_inds
-                        thread_cov_inv_block = sp.zeros((self.n_ra, self.n_dec,
-                                    self.n_ra, self.n_dec), dtype=float)
-                        for thread_kk in xrange(n_time_blocks):
-                            thread_P = pointing_list[thread_kk]
-                            thread_N = noise_list[thread_kk]
-                            thread_P.noise_channel_to_map(thread_N,
-                                        thread_f_ind, thread_cov_inv_block)
-                        if start_file_ind == 0:
-                            # This is our first time through the matrix.  Add
-                            # prior to the diagonal.
-                            thread_cov_inv_block.flat \
-                                    [::self.n_ra * self.n_dec + 1] += \
-                                    1.0 / T_large**2
-                        cov_inv[thread_f_ind,...] += thread_cov_inv_block
-                        if self.feedback > 1:
-                            print thread_f_ind,
-                            sys.stdout.flush()
-                    else :
-                        thread_f_ind = thread_inds[0]
-                        thread_ra_ind = thread_inds[1]
-                        thread_cov_inv_row = sp.zeros((self.n_dec, self.n_chan,
-                                                       self.n_ra, self.n_dec),
-                                                      dtype=float)
-                        for thread_kk in xrange(n_time_blocks):
-                            thread_P = pointing_list[thread_kk]
-                            thread_N = noise_list[thread_kk]
-                            thread_P.noise_to_map_domain(thread_N,
-                                    thread_f_ind, thread_ra_ind,
-                                    thread_cov_inv_row)
-                        # Use a lock to try to stagger the processes and make
-                        # them write at different times.
-                        write_lock.acquire()
-                        cov_inv[thread_f_ind,thread_ra_ind,...] += \
-                                thread_cov_inv_row
-                        write_lock.release()
-                        if (self.feedback > 1
-                            and thread_ra_ind == self.n_ra - 1):
-                            print thread_f_ind,
-                            sys.stdout.flush()
-            # Start the worker threads.
-            thread_list = []
-            for ii in range(self.n_processes):
-                T = threading.Thread(target=thread_work)
-                T.start()
-                thread_list.append(T)
-            # Now put work on the queue for the threads to do.
-            for ii in xrange(self.n_chan):
-                if self.uncorrelated_channels:
-                    index_queue.put(ii)
-                else:
-                    for jj in xrange(self.n_ra):
-                        index_queue.put((ii, jj))
-            # At the end of the queue, tell the threads that they are done.
-            for ii in range(self.n_processes):
-                index_queue.put(None)
-            # Wait for the threads.
-            for T in thread_list:
-                T.join()
-            if not index_queue.empty():
-                msg = "A thread had an error while building map covariance."
-                raise RuntimeError(msg)
-            if self.feedback > 1:
-                print
-        # Now go through and make sure that the noise isn't singular by
-        # adding a bit of information to the diagonal.  This is equivalent to
-        # setting a prior that all pixels are 0 += T_large. This does
-        # bias the map maker slightly, but really shouldn't matter.
-        if self.uncorrelated_channels:
-            #cov_view = cov_inv.view()
-            #cov_view.shape = (self.n_chan, (self.n_ra * self.n_dec)**2)
-            #cov_view[:,::self.n_ra * self.n_dec + 1] += 1.0 / T_large**2
-            #for ii in xrange(self.n_chan):
-            #    cov_inv[ii].flat[::self.n_ra * self.n_dec + 1] += \
-            #            1.0 / T_large**2
-            # This is dealt with more efficiently in thread work.
-            pass
-        else:
-            cov_inv.flat[::self.n_chan * self.n_ra * self.n_dec + 1] += \
-                1.0 / T_large**2
+        #         # Now build up our noise model for this piece of data.
+        #         N = Noise(time_stream, time)
+        #         N.add_mask(mask_inds)
+        #         # The thermal part.
+        #         thermal_noise = self.get_noise_parameter("thermal")
+        #         try:
+        #             N.add_thermal(thermal_noise)
+        #         except NoiseError:
+        #             continue
+        #         # Frequency correlations.
+        #         if params['frequency_correlations'] == 'mean':
+        #             mean_overf = self.get_noise_parameter("mean_over_f")
+        #             N.add_correlated_over_f(*mean_overf)
+        #         elif params['frequency_correlations'] == 'measured':
+        #             # Correlated channel mode noise.
+        #             # The first frequency modes are completly deweighted. This
+        #             # was seen to be nessisary from looking at the noise
+        #             # spectra.
+        #             n_modes_discard = params['number_frequency_modes_discard']
+        #             try:
+        #                 for ii in range(n_modes_discard):
+        #                     mode_noise_params = self.get_noise_parameter(
+        #                             "over_f_mode_" + repr(ii))
+        #                     # Instead of completly discarding, multiply
+        #                     # amplitude by 2.
+        #                     #N.deweight_freq_mode(mode_noise_params[4])
+        #                     mode_noise_params = ((mode_noise_params[0] * 2,)
+        #                                          + mode_noise_params[1:])
+        #                     N.add_over_f_freq_mode(*mode_noise_params)
+        #                 # The remaining frequency modes are noise weighed
+        #                 # normally.
+        #                 n_modes = params['number_frequency_modes']
+        #                 for ii in range(n_modes_discard, n_modes):
+        #                     mode_noise_params = self.get_noise_parameter(
+        #                         "over_f_mode_" + repr(ii))
+        #                     N.add_over_f_freq_mode(*mode_noise_params)
+        #                 # All channel low frequency noise.
+        #                 all_chan_noise_params = self.get_noise_parameter(
+        #                         'all_channel')
+        #                 # In some cases the corner frequncy will be so high that
+        #                 # this scan will contain no information.
+        #                 N.add_all_chan_low(*all_chan_noise_params)
+        #             except NoiseError:
+        #                 if self.feedback > 1:
+        #                     print ("Noise parameters risk numerical"
+        #                            " instability. Data skipped.")
+        #                 continue
+        #         elif params['frequency_correlations'] == 'None':
+        #             pass
+        #         else:
+        #             raise ValueError("Invalid frequency correlations.")
+        #         # Things to do along the time axis.  With no frequency
+        #         # correlations, things are more stable.  Also, thermal noise
+        #         # estimate will be high, so you need to deweight things extra.
+        #         if params['deweight_time_mean']:
+        #             N.deweight_time_mean(T_huge**2)
+        #         if params['deweight_time_slope']:
+        #             N.deweight_time_slope(T_huge**2)
+        #         # If we've subtracted any modes out of the time stream,
+        #         # deweight them.
+        #         for mode_num in range(params['n_ts_foreground_modes']):
+        #             N.deweight_freq_mode(self.get_ts_foreground_mode(mode_num),
+        #                     T_large**2, params['deweight_time_slope'])
+        #         # Store all these for later.
+        #         pointing_list.append(P)
+        #         noise_list.append(N)
+        #         data_list.append(time_stream)
+        #     # Threaded loop to finalize all the noises.  Each finalization
+        #     # requires a large inverse.
+        #     if self.feedback > 1:
+        #         print "Finalizing %d noise blocks: " % len(data_list)
+        #     # Initialize the queue of noise objects to work on.
+        #     noise_queue = Queue()
+        #     # Define a function that takes work off the queue and does it.
+        #     def thread_work():
+        #         while True:
+        #             thread_N = noise_queue.get()
+        #             # None will be the flag that there is no more work to do.
+        #             if thread_N is None:
+        #                 return
+        #             else:
+        #                 thread_N.finalize(frequency_correlations=(not
+        #                         self.uncorrelated_channels),
+        #                         preserve_matrices=False)
+        #                 if self.feedback > 1:
+        #                     sys.stdout.write('.')
+        #                     sys.stdout.flush()
+        #     # Start the worker threads.
+        #     thread_list = []
+        #     for ii in range(self.n_processes):
+        #         T = threading.Thread(target=thread_work)
+        #         T.start()
+        #         thread_list.append(T)
+        #     # Now put work on the queue for the threads to do.
+        #     for N in noise_list:
+        #         noise_queue.put(N)
+        #     # At the end of the queue, tell the threads that they are done.
+        #     for ii in range(self.n_processes):
+        #         noise_queue.put(None)
+        #     # Wait for the threads.
+        #     for T in thread_list:
+        #         T.join()
+        #     if not noise_queue.empty():
+        #         msg = "A thread had an error in Noise finialization."
+        #         raise RuntimeError(msg)
+        #     if self.feedback > 1:
+        #         print
+        #         print "Noise finalized."
+        #     # Construct the dirty map.
+        #     for ii in xrange(len(data_list)):
+        #         time_stream = data_list[ii]
+        #         N = noise_list[ii]
+        #         P = pointing_list[ii]
+        #         # Make the dirty map.
+        #         weighted_time_stream = N.weight_time_stream(time_stream)
+        #         map += P.apply_to_time_axis(weighted_time_stream)
+        #     if self.feedback > 1:
+        #         print "Dirty map done."
+        #         print "Building map covariance. Frequecies finished:"
+        #     # Now we have lists with all the data and thier noise.
+        #     # Accumulate it into a dirty map and its covariance.
+        #     n_time_blocks = len(noise_list)
+        #     # Initialize the queue of work to be done.
+        #     index_queue = Queue()
+        #     # I'm using a Lock to write to the memory map, not because I need
+        #     # it but to hopefully keep simultaniouse writes from grinding
+        #     # things to a halt.
+        #     write_lock = threading.Lock()
+        #     # Define a function that takes work off a queue and does it.
+        #     # Variable local to this function prefixed with 'thread_'.
+        #     def thread_work():
+        #         while True:
+        #             thread_inds = index_queue.get()
+        #             # None will be the flag that there is no more work to do.
+        #             if thread_inds is None:
+        #                 return
+        #             if self.uncorrelated_channels:
+        #                 thread_f_ind = thread_inds
+        #                 thread_cov_inv_block = sp.zeros((self.n_ra, self.n_dec,
+        #                             self.n_ra, self.n_dec), dtype=float)
+        #                 for thread_kk in xrange(n_time_blocks):
+        #                     thread_P = pointing_list[thread_kk]
+        #                     thread_N = noise_list[thread_kk]
+        #                     thread_P.noise_channel_to_map(thread_N,
+        #                                 thread_f_ind, thread_cov_inv_block)
+        #                 if start_file_ind == 0:
+        #                     # This is our first time through the matrix.  Add
+        #                     # prior to the diagonal.
+        #                     thread_cov_inv_block.flat \
+        #                             [::self.n_ra * self.n_dec + 1] += \
+        #                             1.0 / T_large**2
+        #                 cov_inv[thread_f_ind,...] += thread_cov_inv_block
+        #                 if self.feedback > 1:
+        #                     print thread_f_ind,
+        #                     sys.stdout.flush()
+        #             else :
+        #                 thread_f_ind = thread_inds[0]
+        #                 thread_ra_ind = thread_inds[1]
+        #                 thread_cov_inv_row = sp.zeros((self.n_dec, self.n_chan,
+        #                                                self.n_ra, self.n_dec),
+        #                                               dtype=float)
+        #                 for thread_kk in xrange(n_time_blocks):
+        #                     thread_P = pointing_list[thread_kk]
+        #                     thread_N = noise_list[thread_kk]
+        #                     thread_P.noise_to_map_domain(thread_N,
+        #                             thread_f_ind, thread_ra_ind,
+        #                             thread_cov_inv_row)
+        #                 # Use a lock to try to stagger the processes and make
+        #                 # them write at different times.
+        #                 write_lock.acquire()
+        #                 cov_inv[thread_f_ind,thread_ra_ind,...] += \
+        #                         thread_cov_inv_row
+        #                 write_lock.release()
+        #                 if (self.feedback > 1
+        #                     and thread_ra_ind == self.n_ra - 1):
+        #                     print thread_f_ind,
+        #                     sys.stdout.flush()
+        #     # Start the worker threads.
+        #     thread_list = []
+        #     for ii in range(self.n_processes):
+        #         T = threading.Thread(target=thread_work)
+        #         T.start()
+        #         thread_list.append(T)
+        #     # Now put work on the queue for the threads to do.
+        #     for ii in xrange(self.n_chan):
+        #         if self.uncorrelated_channels:
+        #             index_queue.put(ii)
+        #         else:
+        #             for jj in xrange(self.n_ra):
+        #                 index_queue.put((ii, jj))
+        #     # At the end of the queue, tell the threads that they are done.
+        #     for ii in range(self.n_processes):
+        #         index_queue.put(None)
+        #     # Wait for the threads.
+        #     for T in thread_list:
+        #         T.join()
+        #     if not index_queue.empty():
+        #         msg = "A thread had an error while building map covariance."
+        #         raise RuntimeError(msg)
+        #     if self.feedback > 1:
+        #         print
+        # # Now go through and make sure that the noise isn't singular by
+        # # adding a bit of information to the diagonal.  This is equivalent to
+        # # setting a prior that all pixels are 0 += T_large. This does
+        # # bias the map maker slightly, but really shouldn't matter.
+        # if self.uncorrelated_channels:
+        #     #cov_view = cov_inv.view()
+        #     #cov_view.shape = (self.n_chan, (self.n_ra * self.n_dec)**2)
+        #     #cov_view[:,::self.n_ra * self.n_dec + 1] += 1.0 / T_large**2
+        #     #for ii in xrange(self.n_chan):
+        #     #    cov_inv[ii].flat[::self.n_ra * self.n_dec + 1] += \
+        #     #            1.0 / T_large**2
+        #     # This is dealt with more efficiently in thread work.
+        #     pass
+        # else:
+        #     cov_inv.flat[::self.n_chan * self.n_ra * self.n_dec + 1] += \
+        #         1.0 / T_large**2
 
 
 #### Classes ####

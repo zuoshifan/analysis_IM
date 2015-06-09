@@ -496,7 +496,7 @@ class DirtyMapMaker(object):
                              params['interpolation'])
 
                 # save the pointing matrix
-                pointing_file = (self.params["output_root"] + "pointing_mat_" + '.npy')
+                pointing_file = (self.params["output_root"] + 'pointing_mat.npy')
                 if not os.path.exists(pointing_file):
                     pointing_mat = P.get_matrix()
                     al.save(pointing_file, pointing_mat)
