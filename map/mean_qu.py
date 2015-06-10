@@ -99,20 +99,27 @@ class MeanMapMaker(object):
         """
 
         params = self.params
+        Blocks = ()
         for middle in file_middles:
             self.file_middle = middle
             fname = params["input_root"] + middle + params["input_end"]
             Reader = fitsGBT.Reader(fname, feedback=self.feedback)
-            Blocks = Reader.read(self.params['scans'], self.band_ind,
-                                 force_tuple=True)
-            if params['time_block'] == 'scan':
-                for Data in Blocks:
-                    yield self.preprocess_data((Data,))
-            elif params['time_block'] == 'file':
-                yield self.preprocess_data(Blocks)
+            if params['time_block'] == 'all':
+                Blocks = Blocks + Reader.read(self.params['scans'], self.band_ind, force_tuple=True)
+                continue
             else:
-                msg = "time_block parameter must be 'scan' or 'file'."
-                raise ValueError(msg)
+                Blocks = Reader.read(self.params['scans'], self.band_ind, force_tuple=True)
+                if params['time_block'] == 'scan':
+                    for Data in Blocks:
+                        yield self.preprocess_data((Data,))
+                elif params['time_block'] == 'file':
+                    yield self.preprocess_data(Blocks)
+                else:
+                    msg = "time_block parameter must be 'scan' or 'file' or 'all'."
+                    raise ValueError(msg)
+
+        if params['time_block'] == 'all':
+            yield self.preprocess_data(Blocks)
 
     def preprocess_data(self, Blocks):
         """The method converts data to a mapmaker friendly format."""
@@ -596,6 +603,8 @@ class MeanMapMaker(object):
         # This outer loop is over groups of files.  This is so we don't need to
         # hold the noise matrices for all the data in memory at once.
         file_middles = params['file_middles']
+        file_middles = params['file_middles']
+        file_middles = sorted(file_middles) # sort to keep the time order
         n_files = len(file_middles)
         n_files_group = params['n_files_group']
         if n_files_group == 0:
