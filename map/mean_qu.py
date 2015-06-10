@@ -219,6 +219,9 @@ class MeanMapMaker(object):
         time_stream, inds = trim_time_stream(time_stream, (ra, dec),
                 (min(map.get_axis('ra')), min(map.get_axis('dec'))),
                 (max(map.get_axis('ra')), max(map.get_axis('dec'))))
+        scan_bin = np.cumsum([0] + st)
+        st, bin = np.histogram(inds, scan_bin) # new number of time points in each scan after trim
+        st = [n for n in st if n != 0] # remove all zeros
         mask = mask[:,inds]
         ra = ra[inds]
         dec = dec[inds]
@@ -414,19 +417,24 @@ class MeanMapMaker(object):
         del Blocks
         del Reader
         map_shape = (self.n_chan, self.n_ra, self.n_dec)
+
+        scan_streams = [] # to save I,Q,U,V scan streams
+        scan_PAs = [] # to save I,Q,U,V scan PAs
         for ii in pol_inds:
             for jj in band_inds:
                 self.band_ind = jj
                 band_centre = band_centres[jj]
                 self.pol_ind = ii
                 pol = pols[ii]
-                # map = sp.zeros(map_shape, dtype=float)
-                # map = al.make_vect(map, axis_names=('freq', 'ra', 'dec'))
-                # map.set_axis_info('freq', band_centre, delta_freq)
-                # map.set_axis_info('ra', params['field_centre'][0], ra_spacing)
-                # map.set_axis_info('dec', params['field_centre'][1],
-                #                    params['pixel_spacing'])
-                # self.map = map
+                map = sp.zeros(map_shape, dtype=float)
+                map = al.make_vect(map, axis_names=('freq', 'ra', 'dec'))
+                map.set_axis_info('freq', band_centre, delta_freq)
+                map.set_axis_info('ra', params['field_centre'][0], ra_spacing)
+                map.set_axis_info('dec', params['field_centre'][1],
+                                   params['pixel_spacing'])
+                self.map = map
+                freqs = map.get_axis('freq')
+                freqs = freqs/1e6 # MHz
 
                 # self.make_map(utils.polint2str(pol))
                 pol_str = utils.polint2str(pol)
@@ -470,7 +478,9 @@ class MeanMapMaker(object):
                         # subtract P * clean map from time_tream
                         pointing_mat = P.get_matrix()
                         # load the clean map
-                        mapfile = os.getenv('GBT_OUT') + 'maps/pol_dirty_map_%s_800.npy' % pol_str
+                        # mapfile = os.getenv('GBT_OUT') + 'maps/pol_clean_map_%s_800.npy' % pol_str
+                        band_str = str(int(round(band_centre/1e6)))
+                        mapfile = (params['output_root'] + 'clean_map_' + pol_str + '_' + band_str + '.npy')
                         cmap = al.load(mapfile)
                         cmap = al.make_vect(cmap)
 
@@ -491,113 +501,197 @@ class MeanMapMaker(object):
 
                         del time_stream
                         del PA
+                        scan_streams.append(scan_stream)
+                        scan_PAs.append(scan_PA)
+                        del scan_stream
+                        del scan_PA
 
-
-
-        # now load saved data to save for mean Q, U
-        PA_file = os.getenv('GBT_OUT') + 'maps/PA.npy'
-        PA = np.load(PA_file) # degree
-        PA = PA*sp.pi/180.0 # radian
         # construct the rotation matrix, now no RM correction
-        R = np.zeros((2*PA.size, 2*PA.size), dtype=float)
-        for ii in range(PA.size):
-            R[ii, ii] = np.cos(2*PA[ii])
-            R[ii+PA.size, ii+PA.size] = np.cos(2*PA[ii])
-            R[ii, ii+PA.size] = np.sin(2*PA[ii])
-            R[ii+PA.size, ii] = -np.sin(2*PA[ii])
-        # load time stream data
-        tsQ_file = os.getenv('GBT_OUT') + 'maps/pol_Q_time_stream.npy'
-        tsU_file = os.getenv('GBT_OUT') + 'maps/pol_U_time_stream.npy'
-        tsQ = al.load(tsQ_file)
-        tsQ = al.make_vect(tsQ)
-        tsU = al.load(tsU_file)
-        tsU = al.make_vect(tsU)
-        ts = np.zeros((2,)+tsQ.shape, dtype=tsQ.dtype)
-        ts = al.make_vect(ts, axis_names=('pol', 'freq', 'time'))
-        ts[0] = tsQ
-        ts[1] = tsU
-        del tsQ
-        del tsU
-        print 'time stream:'
-        print ts.shape
-        print ts.info
+        scan_PA = scan_PAs[0] # PA should be the same for all I,Q,U,V
+        # scan_PA = scan_PA*sp.pi/180.0 # degree to radian
+        nscan = scan_PA.size
+        R = np.zeros((2*nscan, 2*nscan), dtype=scan_PA.dtype)
+        for ii in range(nscan):
+            R[ii, ii] = np.cos(2*scan_PA[ii])
+            R[ii+nscan, ii+nscan] = np.cos(2*scan_PA[ii])
+            R[ii, ii+nscan] = np.sin(2*scan_PA[ii])
+            R[ii+nscan, ii] = -np.sin(2*scan_PA[ii])
+        del scan_PA
+        del scan_PAs
+        # construct Q,U scan stream
+        ss = np.zeros((2,)+scan_streams[1].shape, dtype=scan_streams[1].dtype)
+        # ss = al.make_vect(ts, axis_names=('pol', 'freq', 'scan'))
+        ss[0] = scan_streams[1] # Q scan stream
+        ss[1] = scan_streams[2] # U scan stream
+        ss = np.transpose(ss, (1, 0, 2)) # make freq the first axis
+        varQ = np.var(scan_streams[1], axis=-1)
+        varU = np.var(scan_streams[2], axis=-1)
+        factor = (varQ + varU) / 2.0
+        del scan_streams
         # noise covariance
-        # factor = 1.0e2
-        factor = (np.var(ts[0]) + np.var(ts[1])) / 2.0
-        Nbar = np.zeros((2*PA.size, 2*PA.size), dtype=float)
-        Nbar[:PA.size, :PA.size] = np.ones((PA.size, PA.size))
-        Nbar[PA.size:, PA.size:] = np.ones((PA.size, PA.size))
-        Nbar = np.dot(np.dot(R, Nbar), R.T)
-        NQ_file = os.getenv('GBT_OUT') + 'maps/pol_ncov_mat_Q_.npy'
-        NU_file = os.getenv('GBT_OUT') + 'maps/pol_ncov_mat_U_.npy'
-        NQ = al.load(NQ_file)
-        NQ = al.make_mat(NQ)
-        NU = al.load(NU_file)
-        NU = al.make_mat(NU)
-        NQU = np.zeros((NQ.shape[0], 2) + (NQ.shape[1],) + (2, NQ.shape[2]), dtype=NQ.dtype)
-        NQU = al.make_mat(NQU, axis_names=('freq', 'pol', 'time', 'pol', 'time'), row_axes=(0, 1, 2), col_axes=(0, 3, 4))
-        NQU[:, 0, :, 0, :] = NQ
-        NQU[:, 1, :, 1, :] = NU
-        del NQ
-        del NU
-        NQU += Nbar.reshape(2, PA.size, 2, PA.size)[np.newaxis, ...]
+        nfreq = ss.shape[0]
+        Nbar = np.zeros((nfreq, 2*nscan, 2*nscan), dtype=float)
+        Nbar[:, :nscan, :nscan] = np.ones((nscan, nscan))
+        Nbar[:, nscan:, nscan:] = np.ones((nscan, nscan))
+        Nbar *= factor[:, np.newaxis, np.newaxis]
+        for fi in range(nfreq):
+            Nbar[fi] = np.dot(np.dot(R, Nbar[fi]), R.T)
+        NQU = np.zeros_like(Nbar)
+        # now only diagonal noise
+        for fi in range(nfreq):
+            NQU[fi, :nscan, :nscan] = varQ[fi] * np.eye(nscan)
+            NQU[fi, nscan:, nscan:] = varU[fi] * np.eye(nscan)
+        # total noise covariance
+        NQU += Nbar
+        del Nbar
         # noise inverse covariance
-        NQU_inv = al.zeros_like(NQU)
-        for fi in range(NQU.shape[0]):
-            print 'freq: ', fi
-            shp1 = NQU[fi].shape
-            shp2 = (np.prod(shp1[:2]), np.prod(shp1[2:]))
-            NQU_inv[fi] = linalg.pinv(NQU[fi].reshape(shp2)).reshape(shp1)
+        NQU_inv = np.zeros_like(NQU)
+        for fi in range(nfreq):
+            NQU_inv[fi] = linalg.pinv(NQU[fi])
         del NQU
-        print 'NQU_inv:'
-        print NQU_inv.shape
-        print NQU_inv.info
-        # load the pointing matrix
-        pointing_file = os.getenv('GBT_OUT') + 'maps/pol_pointing_mat.npy'
-        pointing_mat = al.load(pointing_file)
-        pointing_mat = al.make_mat(pointing_mat)
-        print 'pointing matrix:'
-        print pointing_mat.shape
-        print pointing_mat.info
-        ATNinv = al.partial_dot(pointing_mat.mat_transpose(), NQU_inv)
-        print 'ATNin:'
-        print ATNinv.shape
-        print ATNinv.info
-        ATNinvA = al.partial_dot(ATNinv, pointing_mat)
-        print 'ATNinA:'
-        print ATNinvA.shape
-        print ATNinvA.info
-        # dirty map
-        dmap = al.partial_dot(ATNinv, ts)
-        del ATNinv
-        del ts
-        print 'dirty map:'
-        print dmap.shape
-        print dmap.info
-        # clean map
-        cmap = al.zeros_like(dmap)
-        for fi in range(dmap.shape[0]):
-            tmp_shp = ATNinvA[fi].shape[:3]
-            shp = (np.prod(tmp_shp), np.prod(tmp_shp))
-            left = ATNinvA[fi].transpose(0, 1, 2, 4, 5, 3).reshape(shp)
-            right = dmap[fi].reshape(-1)
-            x, res, rank, s = linalg.lstsq(left, right)
-            cmap[fi] = x.reshape(cmap[fi].shape)
-        del ATNinvA
-        print 'cmap:'
-        print cmap.shape
-        print cmap.info
-        cmapQ_file = os.getenv('GBT_OUT') + 'maps/pol_mean_Q.npy'
-        cmapU_file = os.getenv('GBT_OUT') + 'maps/pol_mean_U.npy'
-        # cmapQ = np.zeros_like(cmap[..., 0])
-        cmapQ = np.copy(cmap[..., 0])
-        cmapQ = al.make_vect(cmapQ, axis_names=('freq', 'ra', 'dec'))
-        cmapQ.info.update(self.map.info)
-        al.save(cmapQ_file, cmapQ)
-        cmapU = np.copy(cmap[..., 0])
-        cmapU = al.make_vect(cmapU, axis_names=('freq', 'ra', 'dec'))
-        cmapU.info.update(self.map.info)
-        al.save(cmapU_file, cmapU)
+        # construct pointing matrix
+        A = np.zeros((2*nscan, 2), dtype=float)
+        A[:nscan, 0] = 1.0
+        A[nscan:, 1] = 1.0
+        for fi in range(nfreq):
+            ATNinv = np.dot(A.T, NQU_inv[fi])
+            dQU = np.dot(ATNinv, ss[fi].reshape(-1, 1)) # dirty Q, U
+            ATNinvA = np.dot(ATNinv, A)
+            x, res, rank, s = linalg.lstsq(ATNinvA, dQU)
+            print 'For frequency: %f, mean Q, U = %s' % (freqs[fi], x.flatten())
+
+
+        # NQ_file = os.getenv('GBT_OUT') + 'maps/pol_ncov_mat_Q_.npy'
+        # NU_file = os.getenv('GBT_OUT') + 'maps/pol_ncov_mat_U_.npy'
+        # NQ = al.load(NQ_file)
+        # NQ = al.make_mat(NQ)
+        # NU = al.load(NU_file)
+        # NU = al.make_mat(NU)
+        # NQU = np.zeros((NQ.shape[0], 2) + (NQ.shape[1],) + (2, NQ.shape[2]), dtype=NQ.dtype)
+        # NQU = al.make_mat(NQU, axis_names=('freq', 'pol', 'time', 'pol', 'time'), row_axes=(0, 1, 2), col_axes=(0, 3, 4))
+        # NQU[:, 0, :, 0, :] = NQ
+        # NQU[:, 1, :, 1, :] = NU
+        # del NQ
+        # del NU
+        # NQU += Nbar.reshape(2, PA.size, 2, PA.size)[np.newaxis, ...]
+        # # noise inverse covariance
+        # NQU_inv = al.zeros_like(NQU)
+        # for fi in range(NQU.shape[0]):
+        #     print 'freq: ', fi
+        #     shp1 = NQU[fi].shape
+        #     shp2 = (np.prod(shp1[:2]), np.prod(shp1[2:]))
+        #     NQU_inv[fi] = linalg.pinv(NQU[fi].reshape(shp2)).reshape(shp1)
+        # del NQU
+        # print 'NQU_inv:'
+        # print NQU_inv.shape
+        # print NQU_inv.info
+
+
+
+        # # now load saved data to save for mean Q, U
+        # PA_file = os.getenv('GBT_OUT') + 'maps/PA.npy'
+        # PA = np.load(PA_file) # degree
+        # PA = PA*sp.pi/180.0 # radian
+        # # construct the rotation matrix, now no RM correction
+        # R = np.zeros((2*PA.size, 2*PA.size), dtype=float)
+        # for ii in range(PA.size):
+        #     R[ii, ii] = np.cos(2*PA[ii])
+        #     R[ii+PA.size, ii+PA.size] = np.cos(2*PA[ii])
+        #     R[ii, ii+PA.size] = np.sin(2*PA[ii])
+        #     R[ii+PA.size, ii] = -np.sin(2*PA[ii])
+        # # load time stream data
+        # tsQ_file = os.getenv('GBT_OUT') + 'maps/pol_Q_time_stream.npy'
+        # tsU_file = os.getenv('GBT_OUT') + 'maps/pol_U_time_stream.npy'
+        # tsQ = al.load(tsQ_file)
+        # tsQ = al.make_vect(tsQ)
+        # tsU = al.load(tsU_file)
+        # tsU = al.make_vect(tsU)
+        # ts = np.zeros((2,)+tsQ.shape, dtype=tsQ.dtype)
+        # ts = al.make_vect(ts, axis_names=('pol', 'freq', 'time'))
+        # ts[0] = tsQ
+        # ts[1] = tsU
+        # del tsQ
+        # del tsU
+        # print 'time stream:'
+        # print ts.shape
+        # print ts.info
+        # # noise covariance
+        # # factor = 1.0e2
+        # factor = (np.var(ts[0]) + np.var(ts[1])) / 2.0
+        # Nbar = np.zeros((2*PA.size, 2*PA.size), dtype=float)
+        # Nbar[:PA.size, :PA.size] = np.ones((PA.size, PA.size))
+        # Nbar[PA.size:, PA.size:] = np.ones((PA.size, PA.size))
+        # Nbar = np.dot(np.dot(R, Nbar), R.T)
+        # NQ_file = os.getenv('GBT_OUT') + 'maps/pol_ncov_mat_Q_.npy'
+        # NU_file = os.getenv('GBT_OUT') + 'maps/pol_ncov_mat_U_.npy'
+        # NQ = al.load(NQ_file)
+        # NQ = al.make_mat(NQ)
+        # NU = al.load(NU_file)
+        # NU = al.make_mat(NU)
+        # NQU = np.zeros((NQ.shape[0], 2) + (NQ.shape[1],) + (2, NQ.shape[2]), dtype=NQ.dtype)
+        # NQU = al.make_mat(NQU, axis_names=('freq', 'pol', 'time', 'pol', 'time'), row_axes=(0, 1, 2), col_axes=(0, 3, 4))
+        # NQU[:, 0, :, 0, :] = NQ
+        # NQU[:, 1, :, 1, :] = NU
+        # del NQ
+        # del NU
+        # NQU += Nbar.reshape(2, PA.size, 2, PA.size)[np.newaxis, ...]
+        # # noise inverse covariance
+        # NQU_inv = al.zeros_like(NQU)
+        # for fi in range(NQU.shape[0]):
+        #     print 'freq: ', fi
+        #     shp1 = NQU[fi].shape
+        #     shp2 = (np.prod(shp1[:2]), np.prod(shp1[2:]))
+        #     NQU_inv[fi] = linalg.pinv(NQU[fi].reshape(shp2)).reshape(shp1)
+        # del NQU
+        # print 'NQU_inv:'
+        # print NQU_inv.shape
+        # print NQU_inv.info
+        # # load the pointing matrix
+        # pointing_file = os.getenv('GBT_OUT') + 'maps/pol_pointing_mat.npy'
+        # pointing_mat = al.load(pointing_file)
+        # pointing_mat = al.make_mat(pointing_mat)
+        # print 'pointing matrix:'
+        # print pointing_mat.shape
+        # print pointing_mat.info
+        # ATNinv = al.partial_dot(pointing_mat.mat_transpose(), NQU_inv)
+        # print 'ATNin:'
+        # print ATNinv.shape
+        # print ATNinv.info
+        # ATNinvA = al.partial_dot(ATNinv, pointing_mat)
+        # print 'ATNinA:'
+        # print ATNinvA.shape
+        # print ATNinvA.info
+        # # dirty map
+        # dmap = al.partial_dot(ATNinv, ts)
+        # del ATNinv
+        # del ts
+        # print 'dirty map:'
+        # print dmap.shape
+        # print dmap.info
+        # # clean map
+        # cmap = al.zeros_like(dmap)
+        # for fi in range(dmap.shape[0]):
+        #     tmp_shp = ATNinvA[fi].shape[:3]
+        #     shp = (np.prod(tmp_shp), np.prod(tmp_shp))
+        #     left = ATNinvA[fi].transpose(0, 1, 2, 4, 5, 3).reshape(shp)
+        #     right = dmap[fi].reshape(-1)
+        #     x, res, rank, s = linalg.lstsq(left, right)
+        #     cmap[fi] = x.reshape(cmap[fi].shape)
+        # del ATNinvA
+        # print 'cmap:'
+        # print cmap.shape
+        # print cmap.info
+        # cmapQ_file = os.getenv('GBT_OUT') + 'maps/pol_mean_Q.npy'
+        # cmapU_file = os.getenv('GBT_OUT') + 'maps/pol_mean_U.npy'
+        # # cmapQ = np.zeros_like(cmap[..., 0])
+        # cmapQ = np.copy(cmap[..., 0])
+        # cmapQ = al.make_vect(cmapQ, axis_names=('freq', 'ra', 'dec'))
+        # cmapQ.info.update(self.map.info)
+        # al.save(cmapQ_file, cmapQ)
+        # cmapU = np.copy(cmap[..., 0])
+        # cmapU = al.make_vect(cmapU, axis_names=('freq', 'ra', 'dec'))
+        # cmapU.info.update(self.map.info)
+        # al.save(cmapU_file, cmapU)
 
 
 
