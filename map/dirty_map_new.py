@@ -446,7 +446,7 @@ class DirtyMapMaker(object):
                 self.cov_inv = cov_inv
                 # Do work.
                 try:
-                    self.make_map(utils.polint2str(pol))
+                    self.make_map()
                 except:
                     # I think yo need to do this to get a sensible error
                     # message, otherwise it will print cov_inv and fill the
@@ -461,7 +461,7 @@ class DirtyMapMaker(object):
         if not self.noise_params is None:
             self.noise_params.close()
 
-    def make_map(self, pol_str):
+    def make_map(self):
         """Makes map for current polarization and band.
 
         This worker function has been split off for testing reasons.
@@ -502,11 +502,11 @@ class DirtyMapMaker(object):
                 P = Pointing(("ra", "dec"), (ra, dec), map,
                              params['interpolation'])
 
-                # save the pointing matrix
-                pointing_file = (self.params["output_root"] + 'pointing_mat.npy')
-                if not os.path.exists(pointing_file):
-                    pointing_mat = P.get_matrix()
-                    al.save(pointing_file, pointing_mat)
+                # # save the pointing matrix
+                # pointing_file = (self.params["output_root"] + 'pointing_mat.npy')
+                # if not os.path.exists(pointing_file):
+                #     pointing_mat = P.get_matrix()
+                #     al.save(pointing_file, pointing_mat)
 
                 # Now build up our noise model for this piece of data.
                 N = Noise(time_stream, time)
@@ -625,13 +625,13 @@ class DirtyMapMaker(object):
                 weighted_time_stream = N.weight_time_stream(time_stream)
                 map += P.apply_to_time_axis(weighted_time_stream)
 
-                # save the noise covariance matrix
-                ncov_file = (self.params["output_root"] + "ncov_mat_" + pol_str + '_' + '.npy')
-                ncov_inv = N.get_inverse()
-                ncov_mat = al.zeros_like(ncov_inv)
-                for fi in range(ncov_inv.shape[0]):
-                    ncov_mat[fi] = linalg.inv(ncov_inv[fi])
-                al.save(ncov_file, ncov_mat)
+                # # save the noise covariance matrix
+                # ncov_file = (self.params["output_root"] + "ncov_mat_" + pol_str + '_' + '.npy')
+                # ncov_inv = N.get_inverse()
+                # ncov_mat = al.zeros_like(ncov_inv)
+                # for fi in range(ncov_inv.shape[0]):
+                #     ncov_mat[fi] = linalg.inv(ncov_inv[fi])
+                # al.save(ncov_file, ncov_mat)
 
             if self.feedback > 1:
                 print "Dirty map done."
