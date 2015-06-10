@@ -126,8 +126,10 @@ class MeanMapMaker(object):
 
         # On the first pass just get dimensions and do some checks.
         nt = 0
+        st = [] # number of time points in each scan
         for Data in Blocks:
             nt += Data.dims[0]
+            st.append(Data.dims[0])
             if Data.dims[3] != self.n_chan:
                 msg = "Data doesn't all have the same number of channels."
                 raise ce.DataError(msg)
@@ -226,7 +228,7 @@ class MeanMapMaker(object):
         ut = ut[inds]
         # Change the format of the mask.
         mask_inds = sp.where(sp.logical_not(mask))
-        return time_stream, ra, dec, az, el, ut, time, mask_inds
+        return time_stream, ra, dec, az, el, ut, time, mask_inds, st
 
     def get_noise_parameter(self, parameter_name):
         """Reads a desired noise parameter for the current data."""
@@ -418,15 +420,79 @@ class MeanMapMaker(object):
                 band_centre = band_centres[jj]
                 self.pol_ind = ii
                 pol = pols[ii]
-                map = sp.zeros(map_shape, dtype=float)
-                map = al.make_vect(map, axis_names=('freq', 'ra', 'dec'))
-                map.set_axis_info('freq', band_centre, delta_freq)
-                map.set_axis_info('ra', params['field_centre'][0], ra_spacing)
-                map.set_axis_info('dec', params['field_centre'][1],
-                                   params['pixel_spacing'])
-                self.map = map
+                # map = sp.zeros(map_shape, dtype=float)
+                # map = al.make_vect(map, axis_names=('freq', 'ra', 'dec'))
+                # map.set_axis_info('freq', band_centre, delta_freq)
+                # map.set_axis_info('ra', params['field_centre'][0], ra_spacing)
+                # map.set_axis_info('dec', params['field_centre'][1],
+                #                    params['pixel_spacing'])
+                # self.map = map
 
-                self.make_map(utils.polint2str(pol))
+                # self.make_map(utils.polint2str(pol))
+                pol_str = utils.polint2str(pol)
+
+                file_middles = params['file_middles']
+                file_middles = sorted(file_middles) # sort to keep the time order
+                n_files = len(file_middles)
+                n_files_group = params['n_files_group']
+                if n_files_group == 0:
+                    n_files_group = n_files
+                for start_file_ind in range(0, n_files, n_files_group):
+                    this_file_middles = file_middles[start_file_ind
+                                                     :start_file_ind + n_files_group]
+                    if self.feedback > 1:
+                        print ("Processing data files %d to %d of %d."
+                               % (start_file_ind, start_file_ind + n_files_group,
+                                  n_files))
+                    # # Initialize lists for the data and the noise.
+                    # data_list = []
+                    # noise_list = []
+                    # pointing_list = []
+
+                    # Loop an iterator that reads and preprocesses the data.
+                    # This loop can't be threaded without a lot of restructuring,
+                    # because iterate_data, preprocess_data and get_noise_parameter
+                    # all talk to each other through class attributes.
+                    for this_data in self.iterate_data(this_file_middles):
+                        # Unpack all the input data.
+                        time_stream, ra, dec, az, el, ut, time, mask_inds, st = this_data
+
+                        # PA_file = os.getenv('GBT_OUT') + 'maps/PA.npy'
+                        # if not os.path.exists(PA_file):
+                        #     np.save(PA_file, PA)
+
+                        # n_time = time_stream.shape[1]
+                        # if n_time < 5:
+                        #     continue
+                        P = Pointing(("ra", "dec"), (ra, dec), map,
+                                     params['interpolation'])
+
+                        # subtract P * clean map from time_tream
+                        pointing_mat = P.get_matrix()
+                        # load the clean map
+                        mapfile = os.getenv('GBT_OUT') + 'maps/pol_dirty_map_%s_800.npy' % pol_str
+                        cmap = al.load(mapfile)
+                        cmap = al.make_vect(cmap)
+
+                        time_stream -= al.partial_dot(pointing_mat, cmap).T
+
+                        # average over each scan
+                        scan_stream = np.zeros((time_stream.shape[0], len(st)), dtype=time_stream.dtype)
+                        # ratation angle
+                        PA = [utils.azel2pGBT(a, e, u) for (a, e, u) in zip(az, el, ut)]
+                        PA = np.array(PA)
+                        scan_PA = np.zeros(len(st), dtype=PA.dtype)
+                        scan_starts = np.cumsum([0] + st[:-1])
+                        for (ii, (n, s)) in enumerate(zip(st, scan_starts)):
+                            # average time stream over each scan
+                            scan_stream[:, ii] = np.mean(time_stream[:, s:s+n], axis=-1)
+                            # average PA over each scan
+                            scan_PA[ii] = np.mean(PA[s:s+n], axis=-1)
+
+                        del time_stream
+                        del PA
+
+
 
         # now load saved data to save for mean Q, U
         PA_file = os.getenv('GBT_OUT') + 'maps/PA.npy'
@@ -598,11 +664,10 @@ class MeanMapMaker(object):
         """
 
         params = self.params
-        map = self.map
+        # map = self.map
         # cov_inv = self.cov_inv
         # This outer loop is over groups of files.  This is so we don't need to
         # hold the noise matrices for all the data in memory at once.
-        file_middles = params['file_middles']
         file_middles = params['file_middles']
         file_middles = sorted(file_middles) # sort to keep the time order
         n_files = len(file_middles)
@@ -626,22 +691,19 @@ class MeanMapMaker(object):
             # all talk to each other through class attributes.
             for this_data in self.iterate_data(this_file_middles):
                 # Unpack all the input data.
-                time_stream, ra, dec, az, el, ut, time, mask_inds = this_data
+                time_stream, ra, dec, az, el, ut, time, mask_inds, st = this_data
 
-                # ratation angle
-                PA = [utils.azel2pGBT(a, e, u) for (a, e, u) in zip(az, el, ut)]
-                PA = np.array(PA)
-                PA_file = os.getenv('GBT_OUT') + 'maps/PA.npy'
-                if not os.path.exists(PA_file):
-                    np.save(PA_file, PA)
+                # PA_file = os.getenv('GBT_OUT') + 'maps/PA.npy'
+                # if not os.path.exists(PA_file):
+                #     np.save(PA_file, PA)
 
-                n_time = time_stream.shape[1]
-                if n_time < 5:
-                    continue
+                # n_time = time_stream.shape[1]
+                # if n_time < 5:
+                #     continue
                 P = Pointing(("ra", "dec"), (ra, dec), map,
                              params['interpolation'])
 
-                ######### here to subtract P * clean map from time_tream
+                # subtract P * clean map from time_tream
                 pointing_mat = P.get_matrix()
                 # load the clean map
                 mapfile = os.getenv('GBT_OUT') + 'maps/pol_dirty_map_%s_800.npy' % pol_str
@@ -649,9 +711,28 @@ class MeanMapMaker(object):
                 cmap = al.make_vect(cmap)
 
                 time_stream -= al.partial_dot(pointing_mat, cmap).T
-                # save the mean time_stream
-                ts_file = (self.params["output_root"] + pol_str + '_time_stream.npy')
-                al.save(ts_file, time_stream)
+
+                # average over each scan
+                scan_stream = np.zeros((time_stream.shape[0], len(st)), dtype=time_stream.dtype)
+                # ratation angle
+                PA = [utils.azel2pGBT(a, e, u) for (a, e, u) in zip(az, el, ut)]
+                PA = np.array(PA)
+                scan_PA = np.zeros(len(st), dtype=PA.dtype)
+                scan_starts = np.cumsum([0] + st[:-1])
+                for (ii, (n, s)) in enumerate(zip(st, scan_starts)):
+                    # average time stream over each scan
+                    scan_stream[:, ii] = np.mean(time_stream[:, s:s+n], axis=-1)
+                    # average PA over each scan
+                    scan_PA[ii] = np.mean(PA[s:s+n], axis=-1)
+
+                del time_stream
+                del PA
+
+                return scan_stream, scan_PA
+
+                # # save the mean time_stream
+                # ts_file = (self.params["output_root"] + pol_str + '_time_stream.npy')
+                # al.save(ts_file, time_stream)
                 #########
 
         #         # Now build up our noise model for this piece of data.
