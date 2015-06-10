@@ -99,21 +99,27 @@ class DirtyMapMaker(object):
         """
 
         params = self.params
+        Blocks = ()
         for middle in file_middles:
             self.file_middle = middle
             fname = params["input_root"] + middle + params["input_end"]
             Reader = fitsGBT.Reader(fname, feedback=self.feedback)
-            Blocks = Reader.read(self.params['scans'], self.band_ind,
-                                 force_tuple=True)
-            if params['time_block'] == 'scan':
-                raise ValueError('time_block can only be file')
-                for Data in Blocks:
-                    yield self.preprocess_data((Data,))
-            elif params['time_block'] == 'file':
-                yield self.preprocess_data(Blocks)
+            if params['time_block'] == 'all':
+                Blocks = Blocks + Reader.read(self.params['scans'], self.band_ind, force_tuple=True)
+                continue
             else:
-                msg = "time_block parameter must be 'scan' or 'file'."
-                raise ValueError(msg)
+                Blocks = Reader.read(self.params['scans'], self.band_ind, force_tuple=True)
+                if params['time_block'] == 'scan':
+                    for Data in Blocks:
+                        yield self.preprocess_data((Data,))
+                elif params['time_block'] == 'file':
+                    yield self.preprocess_data(Blocks)
+                else:
+                    msg = "time_block parameter must be 'scan' or 'file' or 'all'."
+                    raise ValueError(msg)
+
+        if params['time_block'] == 'all':
+            yield self.preprocess_data(Blocks)
 
     def preprocess_data(self, Blocks):
         """The method converts data to a mapmaker friendly format."""
