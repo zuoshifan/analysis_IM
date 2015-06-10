@@ -449,7 +449,8 @@ class MeanMapMaker(object):
         print ts.shape
         print ts.info
         # noise covariance
-        factor = 1.0e2
+        # factor = 1.0e2
+        factor = (np.var(ts[0]) + np.var(ts[1])) / 2.0
         Nbar = np.zeros((2*PA.size, 2*PA.size), dtype=float)
         Nbar[:PA.size, :PA.size] = np.ones((PA.size, PA.size))
         Nbar[PA.size:, PA.size:] = np.ones((PA.size, PA.size))
@@ -470,9 +471,10 @@ class MeanMapMaker(object):
         # noise inverse covariance
         NQU_inv = al.zeros_like(NQU)
         for fi in range(NQU.shape[0]):
-            shp1 = NQU[ii].shape
+            print 'freq: ', fi
+            shp1 = NQU[fi].shape
             shp2 = (np.prod(shp1[:2]), np.prod(shp1[2:]))
-            NQU_inv[ii] = linalg.pinv(NQU[ii].reshape(shp2)).reshape(shp1)
+            NQU_inv[fi] = linalg.pinv(NQU[fi].reshape(shp2)).reshape(shp1)
         del NQU
         print 'NQU_inv:'
         print NQU_inv.shape
