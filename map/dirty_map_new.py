@@ -473,6 +473,7 @@ class DirtyMapMaker(object):
         # This outer loop is over groups of files.  This is so we don't need to
         # hold the noise matrices for all the data in memory at once.
         file_middles = params['file_middles']
+        file_middles = sorted(file_middles) # sort to keep the time order
         n_files = len(file_middles)
         n_files_group = params['n_files_group']
         if n_files_group == 0:
