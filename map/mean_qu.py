@@ -555,12 +555,17 @@ class MeanMapMaker(object):
         A = np.zeros((2*nscan, 2), dtype=float)
         A[:nscan, 0] = 1.0
         A[nscan:, 1] = 1.0
+        data = np.zeros((nfreq, 3), dtype=float)
         for fi in range(nfreq):
             ATNinv = np.dot(A.T, NQU_inv[fi])
             dQU = np.dot(ATNinv, ss[fi].reshape(-1, 1)) # dirty Q, U
             ATNinvA = np.dot(ATNinv, A)
             x, res, rank, s = linalg.lstsq(ATNinvA, dQU)
+            data[fi, 0] = freqs[fi]
+            data[fi, 1:] = x.reshape(-1)
             print 'For frequency: %f, mean Q, U = %s' % (freqs[fi], x.flatten())
+        # save data to file
+        np.savetxt(params['output_root'] + 'freq_meanqu.txt', data, fmt='%f', delimiter='  ')
 
 
         # NQ_file = os.getenv('GBT_OUT') + 'maps/pol_ncov_mat_Q_.npy'
