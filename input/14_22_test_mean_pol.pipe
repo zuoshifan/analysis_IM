@@ -13,8 +13,8 @@ field = '1hr'
 # sessions = [42]
 # sessions = [90]
 # sessions = [87, 88, 89, 90]
-# sessions = [14]
-sessions = [22]
+sessions = [14]
+# sessions = [22]
 
 file_middles = tuple(dir_data.get_data_files(sessions, field=field, 
                                              project="GBT13B_352", 
@@ -93,11 +93,11 @@ pipe_modules = []
 # to first make dirty and clean maps of I,Q,U,V, then use module 
 # mean_qu to solve for the mean Q,U
 
-# from map import dirty_map_new
-# pipe_modules.append(dirty_map_new.DirtyMapMaker)
+from map import dirty_map_new
+pipe_modules.append(dirty_map_new.DirtyMapMaker)
 
-# from map import clean_map
-# pipe_modules.append(clean_map.CleanMapMaker)
+from map import clean_map
+pipe_modules.append(clean_map.CleanMapMaker)
 
 from map import mean_qu
 pipe_modules.append(mean_qu.MeanMapMaker)
