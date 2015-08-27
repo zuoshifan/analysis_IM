@@ -510,7 +510,9 @@ class MeanMapMaker(object):
 
         # construct the rotation matrix, now no RM correction
         scan_PA = scan_PAs[0] # PA should be the same for all I,Q,U,V
-        # scan_PA = scan_PA*sp.pi/180.0 # degree to radian
+        # save scan PA data to file
+        np.savetxt(params['output_root'] + 'scan_PA.txt', scan_PA, fmt='%f', delimiter='  ')
+        scan_PA = scan_PA*sp.pi/180.0 # degree to radian
         nscan = scan_PA.size
         R = np.zeros((2*nscan, 2*nscan), dtype=scan_PA.dtype)
         for ii in range(nscan):
