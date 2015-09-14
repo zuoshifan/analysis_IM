@@ -13,12 +13,13 @@ field = '1hr'
 # sessions = [42]
 # sessions = [90]
 # sessions = [87, 88, 89, 90]
-sessions = [14]
-# sessions = [22]
+# sessions = [14]
+sessions = [22]
 
 file_middles = tuple(dir_data.get_data_files(sessions, field=field, 
                                              project="GBT13B_352", 
 											 type='ralongmap'))
+# print 'file_middles: ', file_middles
 # file_middles = file_middles[:2]
 # file_middles = [file_middles[0], file_middles[1]] # first process only one file
 # map_centre = (217.87, 2.0)
@@ -109,6 +110,7 @@ mqu_input_end = '.fits'
 mqu_output_root = map_base + map_prefix
 mqu_scans = ()
 mqu_IFs = ()
+mqu_cal = 'F' # use data with noise cal switched off
 
 mqu_polarizations = ('I','Q','U','V')
 mqu_field_centre = map_centre
@@ -224,6 +226,7 @@ dm_input_end = '.fits'
 dm_output_root = map_base + map_prefix
 dm_scans = ()
 dm_IFs = ()
+dm_cal = 'F' # use data with noise cal switched off
 
 dm_polarizations = ('I','Q','U','V')
 dm_field_centre = map_centre

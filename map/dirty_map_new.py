@@ -47,6 +47,7 @@ params_init = {# IO:
                # What data to include from each file.
                'scans' : (),
                'IFs' : (0,),
+               'cal': 'T', # 'T' or 'F' for noise cal switched on or off
                'polarizations' : ('I',),
                # Map parameters (Ra (deg), Dec (deg)).
                'field_centre' : (325.0, 0.0),
@@ -155,7 +156,10 @@ class DirtyMapMaker(object):
         for Data in Blocks:
             # First deal with the data.
             this_nt = Data.dims[0]
-            this_data = Data.data[:,self.pol_ind,0,:]
+            assert self.params['cal'] in Data.field['CAL'], 'Invalid parameter: CAL = %s' % self.params['CAL']
+            cal_ind = Data.field['CAL'].tolist().index(self.params['cal'])
+            # this_data = Data.data[:,self.pol_ind,0,:]
+            this_data = Data.data[:,self.pol_ind,cal_ind,:]
             time_stream[:,tmp_time_ind:tmp_time_ind + this_nt] = \
                     this_data.filled(0).transpose()
             # Now figure out if any of the data is masked.
