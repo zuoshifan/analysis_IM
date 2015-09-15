@@ -162,13 +162,16 @@ class MeanMapMaker(object):
             this_nt = Data.dims[0]
             assert self.params['cal'] in Data.field['CAL'], 'Invalid parameter: CAL = %s' % self.params['CAL']
             cal_ind = Data.field['CAL'].tolist().index(self.params['cal'])
+            print 'cal_ind = %d, CAL = %s' % (cal_ind, Data.field['CAL'][cal_ind])
             # this_data = Data.data[:,self.pol_ind,0,:]
             this_data = Data.data[:,self.pol_ind,cal_ind,:]
             time_stream[:,tmp_time_ind:tmp_time_ind + this_nt] = \
                     this_data.filled(0).transpose()
             # Now figure out if any of the data is masked.
+            # this_mask = sp.logical_not(ma.getmaskarray(
+            #     Data.data[:,self.pol_ind,0,:]).transpose())
             this_mask = sp.logical_not(ma.getmaskarray(
-                Data.data[:,self.pol_ind,0,:]).transpose())
+                Data.data[:,self.pol_ind,cal_ind,:]).transpose())
             mask[:,tmp_time_ind:tmp_time_ind + this_nt] = this_mask
             # Copy the other fields.
             Data.calc_pointing()
