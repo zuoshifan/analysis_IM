@@ -14,21 +14,24 @@ field = '1hr'
 # sessions = [90]
 # sessions = [87, 88, 89, 90]
 # sessions = [14]
-sessions = [22]
+# sessions = [22]
+# sessions = [14, 22]
+sessions = range(1, 13) + [14, 15, 22, 24, 28]
 
-file_middles = tuple(dir_data.get_data_files(sessions, field=field, 
-                                             project="GBT13B_352", 
-											 type='ralongmap'))
+file_middles = tuple(dir_data.get_data_files(sessions, field=field, project="GBT13B_352", type='ralongmap'))
+file_middles = file_middles[1:] # no 01_wigglez1hr_centre_ralongmap_35.fits
 # print 'file_middles: ', file_middles
 # file_middles = file_middles[:2]
 # file_middles = [file_middles[0], file_middles[1]] # first process only one file
 # map_centre = (217.87, 2.0)
 # map_shape = (64, 34)
 # map_spacing = .07
-map_centre = (13.0, 1.85)
+# map_centre = (13.0, 1.85)
+map_centre = (12.2, 1.15) # Victor's value
 # map_shape = (161, 83)
 # map_shape = (140, 81) # adjusted to (140,81) due to memory limits.
-map_shape = (64, 34)
+# map_shape = (64, 34)
+map_shape = (96, 96) # Victor's area
 # map_shape = (16, 8)
 # map_shape = (4, 4)
 # map_shape = (32, 16)
